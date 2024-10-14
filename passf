@@ -37,15 +37,6 @@ def is_excluded(file_path, exclude_dirs, exclude_files):
 
     return False
 
-
-# def is_binary(file_path):
-#     """Check if the file is a binary file."""
-#     with open(file_path, 'rb') as f:
-#         chunk = f.read(1024)  # Read a small chunk of the file
-#         if b'\0' in chunk:    # Check for NULL byte, which indicates binary
-#             return True
-#     return False
-
 def is_binary(file_path):
     """Check if the file is a binary file."""
     if os.path.isdir(file_path):
@@ -132,7 +123,6 @@ def main():
     print()
     print(colored("Searching in folder:", "cyan") + f" {target_folder}")
     print(colored("Searching for keywords:", "cyan") + f" {', '.join(keywords)}")
-    print()
     print(colored("Excluding directories:", "red") + f" {', '.join(exclude_dirs)}")
     print(colored("Excluding files:", "red") + f" {', '.join(exclude_files)}")
     print()
