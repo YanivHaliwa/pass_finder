@@ -37,13 +37,26 @@ def is_excluded(file_path, exclude_dirs, exclude_files):
 
     return False
 
+
+# def is_binary(file_path):
+#     """Check if the file is a binary file."""
+#     with open(file_path, 'rb') as f:
+#         chunk = f.read(1024)  # Read a small chunk of the file
+#         if b'\0' in chunk:    # Check for NULL byte, which indicates binary
+#             return True
+#     return False
+
 def is_binary(file_path):
     """Check if the file is a binary file."""
-    with open(file_path, 'rb') as f:
-        chunk = f.read(1024)  # Read a small chunk of the file
-        if b'\0' in chunk:    # Check for NULL byte, which indicates binary
-            return True
-    return False
+    if os.path.isdir(file_path):
+        return False
+    try:
+        with open(file_path, 'rb') as f:
+            chunk = f.read(1024)  # Read a small chunk of the file
+            return b'\0' in chunk  # Check for NULL byte, which indicates binary
+    except IOError:
+        return True
+
 
 def search_keywords_in_folder(target_folder, keywords, grep_length, search_comments, exclude_dirs, exclude_files):
     """Search for multiple keywords within the files of the target folder."""
@@ -60,7 +73,6 @@ def search_keywords_in_folder(target_folder, keywords, grep_length, search_comme
 
             # Skip binary files
             if is_binary(file_path):
-               # print(colored(f"Skipping binary file: {file_path}", "red"))
                 continue
 
             # Only search relevant file types or files without extensions
@@ -68,10 +80,11 @@ def search_keywords_in_folder(target_folder, keywords, grep_length, search_comme
                 for keyword in keywords:
                     matches = search_keyword_in_file(file_path, keyword, grep_length, search_comments)
                     if matches:
+                        print(colored("==============================", "cyan"))
                         print(colored(f"Found in {file_path}:", "green"))
                         for match in matches:
                             print(colored(match, "yellow"))
-                        print(colored("==============================", "cyan"))
+                        
 
 def load_keywords_from_json(json_file):
     """Load include and exclude keywords from a JSON file."""
@@ -80,6 +93,8 @@ def load_keywords_from_json(json_file):
         return data.get("include", []), data.get("exclude_dirs", []), data.get("exclude_files", [])
 
 def main():
+
+    
     parser = argparse.ArgumentParser(description="Search for keywords in files within a target folder.")
     parser.add_argument("target_folder", help="The folder to search in.")
     parser.add_argument("-g", "--grep-length", type=int, default=5, help="The length to search around the keyword (default is 5).")
@@ -97,7 +112,7 @@ def main():
     exclude_files = []
     keywords = []
 
-    # Load keywords and exclusions from JSON if provided
+   # Load keywords and exclusions from JSON if provided
     if args.json_file:
         keywords, exclude_dirs, exclude_files = load_keywords_from_json(args.json_file)
     else:
@@ -110,14 +125,24 @@ def main():
                 "passw", "notes", "secret", "flag", "api"
             ]
 
-        # Handle exclusions if provided
         if args.exclude:
             exclude_dirs_files = [item.strip() for item in args.exclude.split(",")]
             exclude_dirs = [item for item in exclude_dirs_files if os.path.isdir(os.path.join(target_folder, item))]
             exclude_files = [item for item in exclude_dirs_files if os.path.isfile(os.path.join(target_folder, item))]
+    print()
+    print(colored("Searching in folder:", "cyan") + f" {target_folder}")
+    print(colored("Searching for keywords:", "cyan") + f" {', '.join(keywords)}")
+    print()
+    print(colored("Excluding directories:", "red") + f" {', '.join(exclude_dirs)}")
+    print(colored("Excluding files:", "red") + f" {', '.join(exclude_files)}")
+    print()
 
-    print(colored(f"Searching for keywords: {keywords}", "blue"))
-    search_keywords_in_folder(target_folder, keywords, grep_length, search_comments, exclude_dirs, exclude_files)
+    try:
+        search_keywords_in_folder(target_folder, keywords, grep_length, search_comments, exclude_dirs, exclude_files)
+    except KeyboardInterrupt:
+        print(colored("\nSearch stopped by user.", "red"))
+
 
 if __name__ == "__main__":
     main()
+

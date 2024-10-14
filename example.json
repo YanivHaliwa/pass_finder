@@ -1,0 +1,18 @@
+{
+    "include": [
+        "key",
+        "cred",
+        "token",
+        "auth",
+        "pass",
+        "secret",
+        "flag"
+    ],
+    "exclude_dirs": [
+        ".git",
+        ".trash"
+    ],
+    "exclude_files": [
+        ".gitignore"
+    ]
+}
