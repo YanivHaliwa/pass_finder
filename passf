@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+
+import os
+import re
+import argparse
+import json
+from termcolor import colored
+
+def search_keyword_in_file(file_path, keyword, grep_length, search_comments):
+    """Search for a keyword within a file and return matching lines."""
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        content = f.read()
+
+        # Prepare regex for search
+        if search_comments:
+            pattern = re.compile(r"(<!--.{0,%d}%s.{0,%d}-->|(#.{0,%d}%s.{0,%d})|//.{0,%d}%s.{0,%d}|\"\"\".{0,%d}%s.{0,%d}\"\"\")" %
+                                 (grep_length, keyword, grep_length, grep_length, keyword, grep_length, grep_length, keyword, grep_length, grep_length, keyword, grep_length),
+                                 re.IGNORECASE)
+        else:
+            pattern = re.compile(r".{0,%d}%s.{0,%d}" % (grep_length, keyword, grep_length), re.IGNORECASE)
+        
+        # Find all matches
+        matches = pattern.findall(content)
+        return matches
+
+def is_excluded(file_path, exclude_dirs, exclude_files):
+    """Check if a file or directory is excluded based on exclusion lists."""
+    # Check if the file is in any excluded directories
+    for exclude_dir in exclude_dirs:
+        if exclude_dir in file_path:
+            return True
+
+    # Check if the file is in the excluded files list
+    for exclude_file in exclude_files:
+        if file_path.endswith(exclude_file):
+            return True
+
+    return False
+
+def is_binary(file_path):
+    """Check if the file is a binary file."""
+    with open(file_path, 'rb') as f:
+        chunk = f.read(1024)  # Read a small chunk of the file
+        if b'\0' in chunk:    # Check for NULL byte, which indicates binary
+            return True
+    return False
+
+def search_keywords_in_folder(target_folder, keywords, grep_length, search_comments, exclude_dirs, exclude_files):
+    """Search for multiple keywords within the files of the target folder."""
+    for root, dirs, files in os.walk(target_folder):
+        # Skip excluded directories
+        dirs[:] = [d for d in dirs if not is_excluded(os.path.join(root, d), exclude_dirs, exclude_files)]
+        
+        for file_name in files:
+            file_path = os.path.join(root, file_name)
+
+            # Skip excluded files or directories
+            if is_excluded(file_path, exclude_dirs, exclude_files):
+                continue
+
+            # Skip binary files
+            if is_binary(file_path):
+               # print(colored(f"Skipping binary file: {file_path}", "red"))
+                continue
+
+            # Only search relevant file types or files without extensions
+            if file_name.endswith(('.txt', '.php', '.js', '.html', '.conf', '.xml', '.ini')) or not '.' in file_name:
+                for keyword in keywords:
+                    matches = search_keyword_in_file(file_path, keyword, grep_length, search_comments)
+                    if matches:
+                        print(colored(f"Found in {file_path}:", "green"))
+                        for match in matches:
+                            print(colored(match, "yellow"))
+                        print(colored("==============================", "cyan"))
+
+def load_keywords_from_json(json_file):
+    """Load include and exclude keywords from a JSON file."""
+    with open(json_file, 'r') as f:
+        data = json.load(f)
+        return data.get("include", []), data.get("exclude_dirs", []), data.get("exclude_files", [])
+
+def main():
+    parser = argparse.ArgumentParser(description="Search for keywords in files within a target folder.")
+    parser.add_argument("target_folder", help="The folder to search in.")
+    parser.add_argument("-g", "--grep-length", type=int, default=5, help="The length to search around the keyword (default is 5).")
+    parser.add_argument("-c", "--comments", action="store_true", help="Search within comments.")
+    parser.add_argument("-t", "--tags", help="Comma-separated list of custom keywords.")
+    parser.add_argument("-e", "--exclude", help="Comma-separated list of directories or files to exclude from the search.")
+    parser.add_argument("-j", "--json-file", help="JSON file containing include and exclude keywords.")
+
+    args = parser.parse_args()
+
+    target_folder = args.target_folder
+    grep_length = args.grep_length
+    search_comments = args.comments
+    exclude_dirs = []
+    exclude_files = []
+    keywords = []
+
+    # Load keywords and exclusions from JSON if provided
+    if args.json_file:
+        keywords, exclude_dirs, exclude_files = load_keywords_from_json(args.json_file)
+    else:
+        # Use tags if provided, otherwise use default keywords
+        if args.tags:
+            keywords = [tag.strip() for tag in args.tags.split(",")]
+        else:
+            keywords = [
+                "admin", "root", "user", "key", "cred", "token", "auth",
+                "passw", "notes", "secret", "flag", "api"
+            ]
+
+        # Handle exclusions if provided
+        if args.exclude:
+            exclude_dirs_files = [item.strip() for item in args.exclude.split(",")]
+            exclude_dirs = [item for item in exclude_dirs_files if os.path.isdir(os.path.join(target_folder, item))]
+            exclude_files = [item for item in exclude_dirs_files if os.path.isfile(os.path.join(target_folder, item))]
+
+    print(colored(f"Searching for keywords: {keywords}", "blue"))
+    search_keywords_in_folder(target_folder, keywords, grep_length, search_comments, exclude_dirs, exclude_files)
+
+if __name__ == "__main__":
+    main()
