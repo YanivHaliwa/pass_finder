@@ -13,7 +13,6 @@
         ".trash"
     ],
     "exclude_files": [
-        ".gitignore",
-        "mystuff.txt"
+        ".gitignore"
     ]
 }
