@@ -4,6 +4,10 @@ PassF is a powerful and flexible Python-based utility designed for searching sen
 
 This versatile tool combines powerful search capabilities with customizable options, making it suitable for both professional security work and educational/competitive scenarios in cybersecurity.
 
+
+**for more scripts related cyber and securiy check here: [Cyber Security Scripts section](https://github.com/YanivHaliwa/Linux-Stuff/blob/master/README.md#cyber-security-scripts).**
+
+
 ## Key Use Cases
 
 1. **Professional Security Audits**: Identify potential security risks in large codebases.
