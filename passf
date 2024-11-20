@@ -159,7 +159,7 @@ def main():
     if args.json_file:
             json_config = load_config_from_json(args.json_file)
             config.update(json_config)
-            print(config)
+         #   print(config)
             print("loading from json file")  
             for key, value in config.items():
                 if key == "target_folder":
@@ -215,7 +215,7 @@ def main():
     elif not args.tags and not file:
         keywords = [
             "admin", "root", "user", "key", "cred", "token", "auth",
-            "passw", "notes", "secret", "flag", "api"
+            "pass", "notes", "secret", "flag", "api"
         ]
         from_keywords="default"
 
@@ -245,6 +245,13 @@ def main():
         exact=True
         from_exact="default"
     
+    current_location = os.getcwd()
+    if target_folder.startswith("~"):
+        target_folder = os.path.expanduser(target_folder)
+    elif target_folder == ".":
+        target_folder = current_location
+    elif not os.path.isabs(target_folder):
+        target_folder = os.path.join(current_location, target_folder)
     print()
     print(f"{CYAN}Searching in folder:{RESET} {PINK}{target_folder}{RESET}  ({from_target})")
     print(f"{CYAN}Searching for keywords:{RESET} {PINK}{', '.join(keywords)}{RESET} ({from_keywords})")
@@ -268,4 +275,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+    
