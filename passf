@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+
+import os
+import re
+import argparse
+import json
+import sys
+
+# ANSI color codes
+CYAN = '\033[96m'
+GREEN = '\033[92m'
+YELLOW = '\033[93m'
+RED = '\033[91m'
+PINK = '\033[95m'
+RESET = '\033[0m'
+
+def search_keyword_in_file(file_path, keyword, grep_length, search_comments, exact):
+    """Search for a keyword within a file and return matching substrings with context."""
+    matches = []
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                if exact:
+                    pattern = re.compile(r'\b{}\b'.format(re.escape(keyword)), re.IGNORECASE)
+                else:
+                    pattern = re.compile(r'\b{}\w*\b'.format(re.escape(keyword)), re.IGNORECASE)
+                
+                for match in pattern.finditer(line):
+                    start, end = match.span()
+                    pre_start = max(start - grep_length, 0)
+                    post_end = min(end + grep_length, len(line))
+                    pre = line[pre_start:start]
+                    post = line[end:post_end]
+                    matched_text = f"{pre}{line[start:end]}{post}".strip()
+                    matches.append(matched_text)
+    except Exception as e:
+        print(f"{RED}Error reading {file_path}: {e}{RESET}")
+    return matches
+
+def is_excluded(file_path, exclude_dirs, exclude_files):
+    """Check if a file or directory is excluded based on exclusion lists."""
+    # Check if the file is in any excluded directories
+    for exclude_dir in exclude_dirs:
+        if exclude_dir in file_path:
+            return True
+
+    # Check if the file is in the excluded files list
+    for exclude_file in exclude_files:
+        if file_path.endswith(exclude_file):
+            return True
+
+    return False
+
+def is_binary(file_path):
+    """Check if the file is a binary file."""
+    if os.path.isdir(file_path):
+        return False
+    try:
+        with open(file_path, 'rb') as f:
+            chunk = f.read(1024)  # Read a small chunk of the file
+            return b'\0' in chunk  # Check for NULL byte, which indicates binary
+    except IOError:
+        return True
+
+def search_keywords_in_folder(target_folder, keywords, grep_length, search_comments, exclude_dirs, exclude_files,extensions,exact):
+    """Search for multiple keywords within the files of the target folder."""
+    found=False
+    for root, dirs, files in os.walk(target_folder):
+        # Skip excluded directories
+        dirs[:] = [d for d in dirs if not is_excluded(os.path.join(root, d), exclude_dirs, exclude_files)]
+        
+        for file_name in files:
+            file_path = os.path.join(root, file_name)
+
+            # Skip excluded files or directories
+            if is_excluded(file_path, exclude_dirs, exclude_files):
+                continue
+
+            # Skip binary files
+            if is_binary(file_path):
+                continue
+
+            # Only search relevant file types or files without extensions
+            if any(file_name.endswith(ext) for ext in extensions) or not '.' in file_name:
+                for keyword in keywords:
+                    matches = search_keyword_in_file(file_path, keyword, grep_length, search_comments,exact)
+                    if matches:
+                        print(f"{CYAN}=============================={RESET}")
+                        print(f"{GREEN}Found in {file_path}:{RESET}")
+                        found=True
+                        for match in matches:
+                            print(f"{YELLOW}{match}{RESET}")
+    if found==False:
+                print(f"\n\n{RED}No matches found{RESET}")
+                            
+def load_config_from_json(json_file):
+    """Load configuration from a JSON file."""
+    try:
+        with open(json_file, 'r') as f:
+            data = json.load(f)
+            # Extract parameters with defaults if not present
+            config = {
+                "target_folder": data.get("target_folder", "."),
+                "grep_length": data.get("grep_length", 5),
+                "search_comments": data.get("search_comments", None),
+                "exact": data.get("exact", None),
+                "tags": data.get("tags", []),
+                "exclude_dirs": data.get("exclude_dirs", []),
+                "exclude_files": data.get("exclude_files", []),
+                "extensions": data.get("extensions", [])
+            }
+            return config
+    except FileNotFoundError:
+        print(f"{RED}JSON file not found: {json_file}{RESET}")
+        sys.exit(1)
+    except json.JSONDecodeError:
+        print(f"{RED}Invalid JSON format in file: {json_file}{RESET}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"{RED}An error occurred while loading JSON file: {e}{RESET}")
+        sys.exit(1)
+
+
+def main():
+
+    parser = argparse.ArgumentParser(description="Search for keywords in files within a target folder.")
+    parser.add_argument("target_folder", nargs='?', help="The folder to search in.")
+    parser.add_argument("-g", "--grep-length", type=int, help="The length to search around the keyword. default is 10.")
+    parser.add_argument("-c", "--comments", action="store_true", help="Search within comments. default is False.")
+    parser.add_argument("-t", "--tags", help="Comma-separated list of custom keywords.")
+    parser.add_argument("-e", "--exclude", help="Comma-separated list of directories or files to exclude from the search.")
+    parser.add_argument("-j", "--json-file", help="JSON file containing include and exclude keywords.")
+    parser.add_argument("-x", "--extensions",  help="Comma-separated list of extensions to focus in search.")
+    parser.add_argument("-r", "--regex", action="store_true", help="Use regex for searching. default is exact match.")
+    
+    args = parser.parse_args()
+               
+    target_folder =""
+    grep_length = None
+    search_comments = None
+    exclude_dirs = []
+    exclude_files = []
+    exact=None
+    keywords = []   
+    extensions=[]
+    config={}
+    file=False
+    
+    from_target=""
+    from_grep=""
+    from_comments=""
+    from_excludedirs=""
+    from_excludefiles=""
+    from_extensions=""
+    from_exact=""
+    from_keywords=""
+    not_found=[] 
+    
+    if args.json_file:
+            json_config = load_config_from_json(args.json_file)
+            config.update(json_config)
+         #   print(config)
+            print("loading from json file")  
+            for key, value in config.items():
+                if key == "target_folder":
+                    target_folder = value
+                    from_target="file"
+                elif key == "grep_length":
+                    grep_length = value
+                    from_grep="file"
+                elif key == "search_comments":
+                    search_comments = value
+                    from_comments="file"
+                elif key == "exact":
+                    exact = value
+                    from_exact="file"
+                elif key == "tags":
+                    keywords = value
+                    from_keywords="file"
+                elif key == "exclude_dirs":
+                    exclude_dirs = value
+                    from_excludedirs="file"
+                elif key == "exclude_files":
+                    exclude_files = value
+                    from_excludefiles="file"
+                elif key == "extensions":
+                    extensions = value
+                    from_extensions="file"
+            file=True 
+     
+    if args.target_folder:
+         target_folder = args.target_folder
+         from_target="argument"
+    elif not args.target_folder and not file:
+        target_folder = "."
+        from_target="default"
+    
+    if args.grep_length:
+        grep_length = args.grep_length
+        from_grep="argument"
+    elif not args.grep_length and not file:
+        grep_length = 10
+        from_grep="default"
+            
+    if args.comments:
+        search_comments = args.comments
+        from_comments="argument"
+    elif not args.comments and not file:
+        search_comments = False
+        from_comments="default"
+        
+    if args.tags:
+        keywords = [tag.strip() for tag in args.tags.split(",")]
+        from_keywords="argument"
+    elif not args.tags and not file:
+        keywords = [
+            "admin", "root", "user", "key", "cred", "token", "auth",
+            "pass", "notes", "secret", "flag", "api"
+        ]
+        from_keywords="default"
+
+    if args.exclude:
+        exclude_dirs_files = [item.strip() for item in args.exclude.split(",")]
+        dirs = [item for item in exclude_dirs_files if os.path.isdir(os.path.join(target_folder, item))]
+        files = [item for item in exclude_dirs_files if os.path.isfile(os.path.join(target_folder, item))]
+        not_found = [item for item in exclude_dirs_files if item not in dirs and item not in files]       
+        if dirs:
+            exclude_dirs.extend(dirs)
+            from_excludedirs="argument"
+        if files:
+            exclude_files.extend(files)
+            from_excludefiles="argument"
+
+    if args.extensions:
+        extensions = [ext.strip() if ext.strip().startswith('.') else f".{ext.strip()}" for ext in args.extensions.split(",")]
+        from_extensions="argument"
+    elif not args.extensions and not file:
+        extensions = ['.txt', '.log', '.md', '.php', '.js', '.html', '.conf', '.xml', '.ini']
+        from_extensions="default"
+  
+    if args.regex:
+        exact=False
+        from_exact="argument"
+    elif not args.regex and not file:
+        exact=True
+        from_exact="default"
+    
+    current_location = os.getcwd()
+    if target_folder.startswith("~"):
+        target_folder = os.path.expanduser(target_folder)
+    elif target_folder == ".":
+        target_folder = current_location
+    elif not os.path.isabs(target_folder):
+        target_folder = os.path.join(current_location, target_folder)
+    print()
+    print(f"{CYAN}Searching in folder:{RESET} {PINK}{target_folder}{RESET}  ({from_target})")
+    print(f"{CYAN}Searching for keywords:{RESET} {PINK}{', '.join(keywords)}{RESET} ({from_keywords})")
+    print(f"{CYAN}Exact match:{RESET} {PINK}{exact}{RESET} ({from_exact})")
+    print(f"{CYAN}Grep length:{RESET} {PINK}{grep_length}{RESET} ({from_grep})")
+    print(f"{CYAN}Search comments:{RESET} {PINK}{search_comments}{RESET} ({from_comments})")
+    print(f"{CYAN}Extensions:{RESET} {PINK}{', '.join(extensions) if extensions else 'None'}{RESET} ({from_extensions})")
+    if exclude_dirs:
+        print(f"{CYAN}Excluding directories:{RESET} {', '.join(exclude_dirs) if exclude_dirs else 'None'} ({from_excludedirs})")
+    if exclude_files:
+        print(f"{CYAN}Excluding files:{RESET} {', '.join(exclude_files) if exclude_files else 'None'} ({from_excludefiles})")
+    if not_found:
+            print(f"{RED}The following exclude paths do not exist:{RESET} {', '.join(not_found)}")
+    print()
+
+    try:
+        search_keywords_in_folder(target_folder, keywords, grep_length, search_comments, exclude_dirs, exclude_files,extensions,exact)
+    except KeyboardInterrupt:
+        print(f"{RED}\nSearch stopped by user.{RESET}")
+
+
+if __name__ == "__main__":
+    main()
+    
